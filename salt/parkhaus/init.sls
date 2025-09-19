@@ -18,10 +18,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import logging
 import salt.serializers.tomlmod as tomlmod
+
+garage_config_path = "/etc/garage/garage.toml"
 
 def run():
   config = {}
+
   if "garage" in __pillar__:
         garage_packages = ["garage"]
         config["garage_packages"] = {
@@ -30,18 +34,18 @@ def run():
             ]
         }
         if "config" in __pillar__["garage"]:
-            storage_dir   = __pillar__["garage"]["storage_dir"]
+            storage_dir   = __pillar__["garage"].get("storage_dir", "/var/lib/garage")
             garage_config = __pillar__["garage"]["config"]
 
             if not("metadata_dir" in garage_config):
-                garage_config["metadata_dir"] = f"{storage_dir}/metadata"
+                garage_config["metadata_dir"] = f"{storage_dir}/meta"
 
             if not("data_dir" in garage_config):
                 garage_config["data_dir"] = f"{storage_dir}/data"
 
             config["garage_config"] = {
                 "file.managed": [
-                    { "name": "/etc/garage/garage.toml" },
+                    { "name": garage_config_path },
                     { "user": "root" },
                     { "group": "garage" },
                     { "mode":  "0640" },
@@ -53,15 +57,12 @@ def run():
                 ]
             }
 
-            recurse_attributes = ["user", "group", "mode"]
-
             config["garage_storage_dir"] = {
                 "file.directory": [
                     { "name": storage_dir },
                     { "user": "garage" },
                     { "group": "garage" },
                     { "mode":  "0750" },
-                    { "recurse": recurse_attributes },
                     { "require": ["garage_packages"] },
                 ]
             }
@@ -72,7 +73,6 @@ def run():
                     { "user": "garage" },
                     { "group": "garage" },
                     { "mode":  "0750" },
-                    { "recurse": recurse_attributes },
                     { "require": ["garage_storage_dir"] },
                 ]
             }
@@ -83,7 +83,6 @@ def run():
                     { "user": "garage" },
                     { "group": "garage" },
                     { "mode":  "0750" },
-                    { "recurse": recurse_attributes },
                     { "require": ["garage_storage_dir"] },
                 ]
             }

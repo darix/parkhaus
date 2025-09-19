@@ -18,10 +18,10 @@
 #
 
 garage:
-  storage_dir: /mnt/cache/garage
+  storage_dir: /var/lib/garage
   config:
     # by default the 2 directories will be created relative to storage_dir
-    # metadata_dir: {storage_dir}/metadata
+    # metadata_dir: {storage_dir}/meta
     # data_dir:     {storge_dir}/data
     db_engine: sqlite
     replication_factor: 1
