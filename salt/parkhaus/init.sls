@@ -21,6 +21,8 @@
 import logging
 import salt.serializers.tomlmod as tomlmod
 
+log = logging.getLogger(__name__)
+
 garage_config_path = "/etc/garage/garage.toml"
 
 def run():
