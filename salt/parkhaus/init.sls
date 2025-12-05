@@ -139,7 +139,10 @@ def run():
                 ]
             }
 
+            base_deps=["garage_service"]
+
             if __salt__['pillar.get']('garage:layout:apply', False):
+                base_deps.append("garage_setup_layout")
                 config["garage_setup_layout"] = {
                     "garage.layout_assignment": [
                         {'capacity': __salt__['pillar.get']('garage:layout:capacity')},
