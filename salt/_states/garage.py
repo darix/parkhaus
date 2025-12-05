@@ -68,42 +68,48 @@ def layout_assignment(name, capacity, zone, tags=[]):
   ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
 
   current_cluster_layout_result = _get_uri_path("/v2/GetClusterLayout")
-  current_cluster_layout = current_cluster_layout_result.json()
+  if current_cluster_layout_result.status_code == 200:
+    current_cluster_layout = current_cluster_layout_result.json()
 
-  all_correct = True
-  for node in current_cluster_layout['roles']:
-    if not(node['capacity'] == capacity and node['zone'] == zone and node['tags'] == tags):
-      all_correct = False
-      break
+    all_correct = True
+    for node in current_cluster_layout['roles']:
+      if not(node['capacity'] == capacity and node['zone'] == zone and node['tags'] == tags):
+        all_correct = False
+        break
 
-  if all_correct:
-    ret["result"] = True
-    ret["comment"] = "Layout is already correct. You can manually verify it with 'garage layout show'"
-  else:
-    if __opts__["test"]:
-      ret["comment"] = f"Layout needs updating"
+    if all_correct:
+      ret["result"] = True
+      ret["comment"] = "Layout is already correct. You can manually verify it with 'garage layout show'"
     else:
-      new_data = {
-        'roles': _update_layout_data(
-          current_cluster_layout['roles'],
-          {'capacity': capacity, 'zone': zone, 'tags': tags}
-        )
-      }
-      post_result = _post_uri_path('/v2/UpdateClusterLayout', new_data)
-      if post_result.status_code == 200:
-        if len(post_result.json()['stagedRoleChanges']) > 0:
-          new_version = post_result.json()['version'] + 1
-          apply_result =  _post_uri_path('/v2/ApplyClusterLayout', {'version': new_version})
-          if apply_result.status_code == 200:
-            ret["result"] = True
-            ret["changes"][name] = "".join(apply_result.json()['message'])
-          else:
-            ret["result"] = False
-            ret["comment"] = "Something failed during apply cluster layout. Please check 'garage layout show' and 'garage layout history'"
-        else:
-          ret["result"] = True
-          ret["comment"] = "Layout is already correct. You can manually verify it with 'garage layout show'"
+      if __opts__["test"]:
+        ret["comment"] = f"Layout needs updating"
       else:
-        ret["result"] = False
-        ret["comment"] = f"Error while updating the cluster layout: {post_result.json()} {new_data}"
+        new_data = {
+          'roles': _update_layout_data(
+            current_cluster_layout['roles'],
+            {'capacity': capacity, 'zone': zone, 'tags': tags}
+          )
+        }
+        post_result = _post_uri_path('/v2/UpdateClusterLayout', new_data)
+        if post_result.status_code == 200:
+          if len(post_result.json()['stagedRoleChanges']) > 0:
+            new_version = post_result.json()['version'] + 1
+            apply_result =  _post_uri_path('/v2/ApplyClusterLayout', {'version': new_version})
+            if apply_result.status_code == 200:
+              ret["result"] = True
+              ret["changes"][name] = "".join(apply_result.json()['message'])
+            else:
+              ret["result"] = False
+              ret["comment"] = f"Something failed during apply cluster layout. {apply_result.status_code} {apply_result.json()}\n\nPlease check 'garage layout show' and 'garage layout history'"
+          else:
+            ret["result"] = True
+            ret["comment"] = "Layout is already correct. You can manually verify it with 'garage layout show'"
+        else:
+          ret["result"] = False
+          ret["comment"] = f"Error while updating the cluster layout: {post_result.status_code} {post_result.json()} {new_data}"
+
+  else:
+    ret["result"] = False
+    ret["comment"] = f"Error file fetching the current cluster layout {current_cluster_layout_result.status_code} {current_cluster_layout_result.json()}"
+
   return ret
