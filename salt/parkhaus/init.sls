@@ -111,12 +111,13 @@ def run():
                 ]
             }
 
-            config["garage_setup_layout"] = {
-                "garage.layout_assignment": [
-                  {'capacity': __salt__['pillar.get']('garage:layout:capacity')},
-                  {'zone': __salt__['pillar.get']('garage:layout:zone')},
-                  {'tags': __salt__['pillar.get']('garage:layout:tags', [])}
-                ]
-            }
+            if __salt__['pillar.get']('garage:layout:apply', False):
+                config["garage_setup_layout"] = {
+                    "garage.layout_assignment": [
+                    {'capacity': __salt__['pillar.get']('garage:layout:capacity')},
+                    {'zone': __salt__['pillar.get']('garage:layout:zone')},
+                    {'tags': __salt__['pillar.get']('garage:layout:tags', [])}
+                    ]
+                }
 
   return config
