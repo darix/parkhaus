@@ -20,6 +20,7 @@
 
 import logging
 import salt.serializers.tomlmod as tomlmod
+from salt.exceptions import SaltConfigurationError
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +30,9 @@ def run():
   config = {}
 
   if "garage" in __pillar__:
-        garage_packages = ["garage"]
+        python_version = __salt__["grains.get"]("pythonversion")
+        garage_packages = ["garage", f"python{python_version[0]}{python_version[1]}-toml"]
+
         config["garage_packages"] = {
             "pkg.latest": [
                 {'pkgs': garage_packages},
@@ -44,6 +47,16 @@ def run():
 
             if not("data_dir" in garage_config):
                 garage_config["data_dir"] = f"{storage_dir}/data"
+
+            # if not("bootstrap_peers" in garage_config):
+            #     bootstrap_role          = __salt__["pillar.get"]("garage:bootstrap_role", None)
+            #     bootstrap_mine_function = __salt__["pillar.get"]("garage:bootstrap_mine_function", None)
+
+            #     if (bootstrap_role is None) or (bootstrap_mine_function is None):
+            #         bootstrap_peers = []
+            #         raise SaltConfigurationError("garage:config:bootstrap_peers is not set and garage:bootstrap_role + garage:bootstrap_mine_function are also not set")
+            #         bootstrap_peers = __salt__['mine.get'](f"I@role:{bootstrap_role}", bootstrap_mine_function, tgt_type='compound')
+
 
             config["garage_config"] = {
                 "file.managed": [
@@ -95,6 +108,14 @@ def run():
                     { "enable": True },
                     { "watch": ["garage_config"] },
                     { "require": ["garage_data_dir", "garage_metadata_dir", "garage_config"] },
+                ]
+            }
+
+            config["garage_setup_layout"] = {
+                "garage.layout_assignment": [
+                  {'capacity': __salt__['pillar.get']('garage:layout:capacity')},
+                  {'zone': __salt__['pillar.get']('garage:layout:zone')},
+                  {'tags': __salt__['pillar.get']('garage:layout:tags', [])}
                 ]
             }
 
