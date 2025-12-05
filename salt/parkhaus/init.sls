@@ -102,6 +102,34 @@ def run():
                 ]
             }
 
+            # TODO:
+            # {{ cfg.config.metadata_dir }}/node_key:
+            # file.decode:
+            #     - encoding_type: base64
+            #     - contents_pillar: garage:node_key_base64
+            #     - require:
+            #     - file: {{ cfg.config.metadata_dir }}
+
+            # {{ cfg.config.metadata_dir }}/node_key.pub:
+            # file.decode:
+            #     - encoding_type: base64
+            #     - contents_pillar: garage:node_key_pub_base64
+            #     - require:
+            #     - file: {{ cfg.config.metadata_dir }}
+
+            # permissions_{{ cfg.config.metadata_dir }}/node_key:
+            # file.managed:
+            #     - name: {{ cfg.config.metadata_dir }}/node_key
+            #     - user: garage
+            #     - group: garage
+            #     - mode: '0600'
+
+            # permissions_{{ cfg.config.metadata_dir }}/node_key.pub:
+            # file.managed:
+            #     - name: {{ cfg.config.metadata_dir }}/node_key.pub
+            #     - user: garage
+            #     - group: garage
+            #     - mode: '0600'
             config["garage_service"] = {
                 "service.running": [
                     { "name": "garage.service" },
