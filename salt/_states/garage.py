@@ -91,12 +91,69 @@ def key_exists(name, key_id, secret_key, current_garage_keys):
 def key_absent(name, key_id):
   ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
 
-  delete_result = __salt__['garage.post_uri_path']('/v2/DeleteKey', params={'id': key_id})
-  if delete_result.status_code == 200:
-    ret["result"] = True
-    ret["changes"][key_id] = f"Deleted key"
+  if __opts__["test"]:
+    ret["comment"] = f"Deleting key {key_id}"
   else:
+    delete_result = __salt__['garage.post_uri_path']('/v2/DeleteKey', params={'id': key_id})
+    if delete_result.status_code == 200:
+      ret["result"] = True
+      ret["comment"] = f"Deleted key {key_id}"
+      ret["changes"][key_id] = f"Deleted key {key_id}"
+    else:
+      ret["result"] = False
+      ret["comment"] = f"Error deleting the key: {delete_result.status_code} {delete_result.json()}"
+
+  return ret
+
+def bucket_exists(name, config, current_garage_buckets=[]):
+  ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+  changes = []
+
+  bucket_info_result = __salt__['garage.get_uri_path']('/v2/GetBucketInfo', params={'globalAlias': name})
+  if bucket_info_result.status_code == 500:
     ret["result"] = False
-    ret["comment"] = f"Error deleting the key: {delete_result.status_code} {delete_result.json()}"
+    ret["comment"] = f"Error while fetching bucket info for {name}: {bucket_info_result.status_code} {bucket_info_result.json()}"
+    return ret
+  elif bucket_info_result.status_code == 200:
+    bucket_info = bucket_info_result.json()
+  elif bucket_info_result.status_code == 404:
+    new_bucket_data = {'globalAlias': name}
+    if "local_alias" in config:
+      new_bucket_data['localAlias'] = config['local_alias']
+    bucket_create_result = __salt__['garage.post_uri_path']('/v2/CreateBucket', new_bucket_data)
+    if bucket_create_result.status_code == 200:
+      bucket_info = bucket_create_result.json()
+      changes.append(f"Created Bucket {name}")
+    else:
+      ret["result"] = False
+      ret["comment"] = f"Error while creating bucket {name}: {bucket_info_result.status_code} {bucket_info_result.json()}"
+      return ret
+
+  # TODO: update bucket fields
+
+  if len(changes) > 0:
+    ret['changes'][name] = changes
+    ret['result'] = True
+  return ret
+
+def bucket_absent(name, bucket_id):
+  ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+  if __opts__["test"]:
+    ret["comment"] = f"Deleting bucket {bucket_id}"
+  else:
+    delete_result = __salt__['garage.post_uri_path']('/v2/DeleteBucket', params={'id': bucket_id})
+    if delete_result.status_code == 200:
+      ret["result"] = True
+      ret["Comment"] = f"Buckets removed!"
+      ret["changes"][bucket_id] = f"Deleted bucket"
+    elif delete_result.status_code == 400:
+      ret["result"] = False
+      ret["comment"] = f"Bucket {bucket_id} is not empty!"
+    elif delete_result.status_code == 400:
+      ret["result"] = True
+      ret["comment"] = f"Bucket {bucket_id} is already deleted"
+    else:
+      ret["result"] = False
+      ret["comment"] = f"Error deleting the key: {delete_result.status_code} {delete_result.json()}"
 
   return ret

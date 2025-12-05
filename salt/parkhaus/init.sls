@@ -19,6 +19,7 @@
 #
 
 import logging
+import functools
 import salt.serializers.tomlmod as tomlmod
 from salt.exceptions import SaltConfigurationError
 
@@ -196,5 +197,58 @@ def run():
                             {'require': base_deps},
                         ]
                     }
+
+            garage_buckets_pillar_path = 'garage:buckets'
+            current_garage_buckets = __salt__['garage.list_buckets']()
+            pillar_garage_buckets  = __salt__['pillar.get'](garage_buckets_pillar_path, {})
+
+            created_buckets_aliases = []
+
+            if isinstance(pillar_garage_buckets, dict):
+                for bucket_name, bucket_data in pillar_garage_buckets.items():
+                    bucket_section = f"garage_bucket_create_{bucket_name}"
+                    config[bucket_section] = {
+                        "garage.bucket_exists": [
+                            {'name':       bucket_name},
+                            {'config':     bucket_data},
+                            {'require':    base_deps},
+                            {'current_garage_buckets': current_garage_buckets},
+                        ]
+                    }
+                    created_buckets_aliases.append(bucket_name)
+            elif isinstance(pillar_garage_buckets, list):
+                for bucket_data in pillar_garage_buckets:
+                    bucket_name = bucket_data['name']
+                    bucket_section = f"garage_bucket_create_{bucket_name}"
+                    config[bucket_section] = {
+                        "garage.bucket_exists": [
+                            {'name':       bucket_name},
+                            {'config':     bucket_data},
+                            {'require':    base_deps},
+                            {'current_garage_buckets': current_garage_buckets},
+                        ]
+                    }
+                    created_buckets_aliases.append(bucket_name)
+            else:
+                raise SaltConfigurationError(f"Do not know how to handle a {garage_buckets_pillar_path} of {type(pillar_garage_buckets)}")
+
+            # created_buckets_aliases = []
+            if __salt__['pillar.get']('garage:purge_unmanaged_buckets', False):
+                def has_no_active_alias(bucket_record, existing_alias_list):
+                    return not(functools.reduce(lambda a,b: a & b, [(alias in existing_alias_list) for alias in bucket_record['globalAliases']]))
+
+                for bucket_data in current_garage_buckets:
+                    if has_no_active_alias(bucket_data, created_buckets_aliases):
+                        bucket_id = bucket_data["id"]
+                        bucket_name = bucket_data["id"]
+                        if len(bucket_data['globalAliases']) > 0:
+                            bucket_name = bucket_data['globalAliases'][0]
+
+                        config[f"garage_bucket_remove_{bucket_name}"] = {
+                            "garage.bucket_absent": [
+                                {'bucket_id': bucket_id},
+                                {'require': base_deps},
+                            ]
+                        }
 
   return config
