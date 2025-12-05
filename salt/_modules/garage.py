@@ -57,3 +57,10 @@ def list_keys():
     return key_list_result.json()
   else:
     raise SaltConfigurationError(f"Can not fetch existing Keys: {key_list_result.status_code} {key_list_result.json()}")
+
+def list_buckets():
+  bucket_list_result = get_uri_path('/v2/ListBuckets')
+  if bucket_list_result.status_code == 200:
+    return bucket_list_result.json()
+  else:
+    raise SaltConfigurationError(f"Can not fetch existing Keys: {key_lbucket_list_resultist_result.status_code} {bucket_list_result.json()}")
