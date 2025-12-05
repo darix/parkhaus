@@ -147,8 +147,52 @@ def run():
                     "garage.layout_assignment": [
                         {'capacity': __salt__['pillar.get']('garage:layout:capacity')},
                         {'zone': __salt__['pillar.get']('garage:layout:zone')},
-                        {'tags': __salt__['pillar.get']('garage:layout:tags', [])}
-                        {'require', ["garage_service"]}
+                        {'tags': __salt__['pillar.get']('garage:layout:tags', [])},
+                        {'require': ["garage_service"]},
+                    ]
+                }
+
+            garage_keys_pillar_path = 'garage:keys'
+            current_garage_keys = [x['id'] for x in __salt__['garage.list_keys']()]
+            pillar_garage_keys  = __salt__['pillar.get'](garage_keys_pillar_path, {})
+
+            created_keys = []
+
+            if isinstance(pillar_garage_keys, dict):
+                for key_name, key_data in pillar_garage_keys.items():
+                    key_section = f"garage_key_create_{key_name}"
+                    config[key_section] = {
+                        "garage.key_exists": [
+                            {'name':       key_name},
+                            {'key_id':     key_data['key_id']},
+                            {'secret_key': key_data['secret_key']},
+                            {'require':    base_deps},
+                            {'current_garage_keys': current_garage_keys},
+                        ]
+                    }
+                    created_keys.append(key_data['key_id'])
+            elif isinstance(pillar_garage_keys, list):
+                for key_data in pillar_garage_keys:
+                    key_name = key_data['name']
+                    key_section = f"garage_key_create_{key_name}"
+                    config[key_section] = {
+                        "garage.key_exists": [
+                            {'name':       key_name},
+                            {'key_id':     key_data['key_id']},
+                            {'secret_key': key_data['secret_key']},
+                            {'require':    base_deps},
+                            {'current_garage_keys': current_garage_keys},
+                        ]
+                    }
+                    ccreated_keys.append(key_data['key_id'])
+            else:
+                raise SaltConfigurationError(f"Do not know how to handle a {garage_keys_pillar_path} of {type(pillar_garage_keys)}")
+
+            for key_id in [x for x in current_garage_keys if not(x in created_keys)]:
+                config[f"garage_key_remove_{key_id}"] = {
+                    "garage.key_absent": [
+                        {'key_id': key_id},
+                        {'require': base_deps},
                     ]
                 }
 
