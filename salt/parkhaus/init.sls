@@ -188,12 +188,13 @@ def run():
             else:
                 raise SaltConfigurationError(f"Do not know how to handle a {garage_keys_pillar_path} of {type(pillar_garage_keys)}")
 
-            for key_id in [x for x in current_garage_keys if not(x in created_keys)]:
-                config[f"garage_key_remove_{key_id}"] = {
-                    "garage.key_absent": [
-                        {'key_id': key_id},
-                        {'require': base_deps},
-                    ]
-                }
+            if __salt__['pillar.get']('garage:purge_unmanaged_keys', False):
+                for key_id in [x for x in current_garage_keys if not(x in created_keys)]:
+                    config[f"garage_key_remove_{key_id}"] = {
+                        "garage.key_absent": [
+                            {'key_id': key_id},
+                            {'require': base_deps},
+                        ]
+                    }
 
   return config
