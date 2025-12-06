@@ -27,6 +27,48 @@ log = logging.getLogger(__name__)
 
 garage_config_path = "/etc/garage/garage.toml"
 
+def _update_settings_on_bucket(config, bucket_section, bucket_name, bucket_data):
+
+  bucket_result = __salt__['garage.get_uri_path']("/v2/GetBucketInfo", {'globalAlias': bucket_name})
+  if bucket_result.status_code == 200:
+    bucket_info = bucket_result.json()
+
+    keys_to_assign = bucket_data.get('keys', {})
+    keys_assigned = keys_to_assign.keys()
+
+    for key_block in bucket_info.get('keys', []):
+        key_name = key_block['name']
+        if not(key_name in keys_assigned):
+            config[f"garage_bucket_drop_key_{bucket_name}_{key_name}"] = {
+                "garage.bucket_key_assignment_absent": [
+                    {'key_name':    key_name},
+                    {'bucket_id':   bucket_info['id']},
+                    {'accessKeyId': key_block['accessKeyId']},
+                    {'permissions': key_block['permissions']},
+                    {'require':     [bucket_section]},
+                ]
+            }
+
+    for key_name, key_permissions in keys_to_assign.items():
+        config[f"garage_bucket_assign_key_{bucket_name}_{key_name}"] = {
+            "garage.bucket_key_assignment_present": [
+                {'bucket_info': bucket_info},
+                {'key_name':    key_name},
+                {'permissions': key_permissions},
+                {'require':     [bucket_section]},
+            ]
+        }
+
+    if 'config' in bucket_data:
+        config[f"garage_bucket_update_config"] = {
+            "garage.bucket_set_config": [
+                {'bucket_info':   bucket_info},
+                {'bucket_config': bucket_data['config']}
+            ]
+        }
+  else:
+    raise SaltConfigurationError(f"Can not bucket information for {bucket_name} {bucket_result.status_code}: {bucket_result.json()}")
+
 def run():
   config = {}
 
@@ -210,11 +252,12 @@ def run():
                     config[bucket_section] = {
                         "garage.bucket_exists": [
                             {'name':       bucket_name},
-                            {'config':     bucket_data},
                             {'require':    base_deps},
                             {'current_garage_buckets': current_garage_buckets},
                         ]
                     }
+                    _update_settings_on_bucket(config, bucket_section, bucket_name, bucket_data)
+
                     created_buckets_aliases.append(bucket_name)
             elif isinstance(pillar_garage_buckets, list):
                 for bucket_data in pillar_garage_buckets:
@@ -223,11 +266,12 @@ def run():
                     config[bucket_section] = {
                         "garage.bucket_exists": [
                             {'name':       bucket_name},
-                            {'config':     bucket_data},
                             {'require':    base_deps},
                             {'current_garage_buckets': current_garage_buckets},
                         ]
                     }
+                    _update_settings_on_bucket(config, bucket_section, bucket_name, bucket_data)
+
                     created_buckets_aliases.append(bucket_name)
             else:
                 raise SaltConfigurationError(f"Do not know how to handle a {garage_buckets_pillar_path} of {type(pillar_garage_buckets)}")

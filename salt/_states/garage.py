@@ -3,6 +3,7 @@ import logging
 import requests
 import re
 import json
+import functools
 from salt.exceptions import SaltConfigurationError, SaltRenderError
 
 log = logging.getLogger(__name__)
@@ -105,9 +106,19 @@ def key_absent(name, key_id):
 
   return ret
 
-def bucket_exists(name, config, current_garage_buckets=[]):
+def _key_needs_assigning(new_key_data, existing_keys):
+  for key_block in existing_keys:
+    if  new_key_data['accessKeyId'] == key_block['accessKeyId'] and \
+        new_key_data['permissions']['read']  == key_block['permissions']['read'] and \
+        new_key_data['permissions']['write'] == key_block['permissions']['write'] and \
+        new_key_data['permissions']['owner'] == key_block['permissions']['owner']:
+        return False
+  return True
+
+def bucket_exists(name, current_garage_buckets=[]):
   ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
   changes = []
+  bucket_info = {}
 
   bucket_info_result = __salt__['garage.get_uri_path']('/v2/GetBucketInfo', params={'globalAlias': name})
   if bucket_info_result.status_code == 500:
@@ -115,25 +126,22 @@ def bucket_exists(name, config, current_garage_buckets=[]):
     ret["comment"] = f"Error while fetching bucket info for {name}: {bucket_info_result.status_code} {bucket_info_result.json()}"
     return ret
   elif bucket_info_result.status_code == 200:
-    bucket_info = bucket_info_result.json()
+    ret["result"] = True
+    ret["comment"] = f"Bucket {name} already exists"
   elif bucket_info_result.status_code == 404:
     new_bucket_data = {'globalAlias': name}
-    if "local_alias" in config:
-      new_bucket_data['localAlias'] = config['local_alias']
+
     bucket_create_result = __salt__['garage.post_uri_path']('/v2/CreateBucket', new_bucket_data)
     if bucket_create_result.status_code == 200:
       bucket_info = bucket_create_result.json()
-      changes.append(f"Created Bucket {name}")
+      ret['result'] = True
+      ret['changes'][name] = changes
+
     else:
       ret["result"] = False
       ret["comment"] = f"Error while creating bucket {name}: {bucket_info_result.status_code} {bucket_info_result.json()}"
       return ret
 
-  # TODO: update bucket fields
-
-  if len(changes) > 0:
-    ret['changes'][name] = changes
-    ret['result'] = True
   return ret
 
 def bucket_absent(name, bucket_id):
@@ -149,11 +157,86 @@ def bucket_absent(name, bucket_id):
     elif delete_result.status_code == 400:
       ret["result"] = False
       ret["comment"] = f"Bucket {bucket_id} is not empty!"
-    elif delete_result.status_code == 400:
+    elif delete_result.status_code == 404:
       ret["result"] = True
       ret["comment"] = f"Bucket {bucket_id} is already deleted"
     else:
       ret["result"] = False
       ret["comment"] = f"Error deleting the key: {delete_result.status_code} {delete_result.json()}"
+  return ret
+
+def bucket_set_config(name, bucket_info, bucket_config):
+  ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+  bucket_id = bucket_info['id']
+  if __opts__["test"]:
+    ret["comment"] = f"Updating config on {bucket_id}"
+  else:
+    if functools.reduce(lambda a,b: a & b, [(bucket_info[key] == bucket_config[key]) for key in bucket_config.keys()]):
+      ret["result"] = True
+      ret["comment"] = f"Bucket config already correct"
+    else:
+      set_config_result = __salt__['garage.post_uri_path']('/v2/UpdateBucket', post_data=bucket_config, params={'id': bucket_id})
+      if set_config_result.status_code == 200:
+        ret["result"] = True
+        ret["comment"] = f"Bucket config updated"
+        ret["changes"] = bucket_config
+      elif set_config_result.status_code == 404:
+        ret["result"] = False
+        ret["comment"] = f"Bucket {bucket_id} does not exist"
+      else:
+        ret["result"] = False
+        ret["comment"] = f"Error updating the bucket config: {set_config_result.status_code} {set_config_result.json()}"
+  return ret
+
+
+def bucket_key_assignment_present(name, bucket_info, key_name, permissions):
+  ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+  key_result    = __salt__['garage.get_uri_path']("/v2/GetKeyInfo",    {'search': key_name})
+  if key_result.status_code == 200:
+    krj = key_result.json()
+    new_data = {
+      'bucketId': bucket_info['id'],
+      'accessKeyId': krj['accessKeyId'],
+      'permissions': {
+        'read':  permissions.get('read', False),
+        'write': permissions.get('write', False),
+        'owner': permissions.get('owner', False),
+      },
+    }
+
+    if _key_needs_assigning(new_data, bucket_info['keys']):
+      update_result = __salt__['garage.post_uri_path']('/v2/AllowBucketKey', post_data=new_data)
+      if update_result.status_code == 200:
+        ret["result"] = True
+        ret["changes"][name] = f"Assigned key {key_name} to {name}"
+      else:
+        ret["result"] = False
+        ret["comment"] = f"Error while assigning a key {update_result.status_code}: {update_result.json()}"
+    else:
+      ret["result"] = True
+      ret["comment"] = f"Key already properly assigned"
+  else:
+    ret["result"] = False
+    ret["comment"] = f"Error while fetching key info {key_result.status_code}: {key_result.json()}"
+  return ret
+
+def bucket_key_assignment_absent(name, key_name, bucket_id, accessKeyId, permissions):
+  ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+
+  new_data = {
+    'bucketId':    bucket_id,
+    'accessKeyId': accessKeyId,
+    'permissions': permissions,
+  }
+
+  update_result = __salt__['garage.post_uri_path']('/v2/DenyBucketKey', post_data=new_data)
+
+  if update_result.status_code == 200:
+    ret["result"] = True
+    ret["changes"][name] = f"Dropped assigned key {key_name} to {bucket_id}"
+  else:
+    ret["result"] = False
+    ret["comment"] = f"Error while drop a key assignment {update_result.status_code}: {update_result.json()}"
 
   return ret
+
