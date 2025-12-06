@@ -22,6 +22,7 @@ import os
 import re
 import logging
 import functools
+import requests
 import salt.serializers.tomlmod as tomlmod
 from salt.exceptions import SaltConfigurationError
 
@@ -45,31 +46,30 @@ def _this_is_first_peer():
     return primary_node == __salt__['grains.get']('fqdn')
 
 def _update_settings_on_bucket(config, bucket_section, bucket_name, bucket_data):
-
-  bucket_result = __salt__['garage.get_uri_path']("/v2/GetBucketInfo", {'globalAlias': bucket_name})
-  if bucket_result.status_code == 200:
-    bucket_info = bucket_result.json()
-
     keys_to_assign = bucket_data.get('keys', {})
     keys_assigned = keys_to_assign.keys()
 
-    for key_block in bucket_info.get('keys', []):
-        key_name = key_block['name']
-        if not(key_name in keys_assigned):
-            config[f"garage_bucket_drop_key_{bucket_name}_{key_name}"] = {
-                "garage.bucket_key_assignment_absent": [
-                    {'key_name':    key_name},
-                    {'bucket_id':   bucket_info['id']},
-                    {'accessKeyId': key_block['accessKeyId']},
-                    {'permissions': key_block['permissions']},
-                    {'require':     [bucket_section]},
-                ]
-            }
+    bucket_result = __salt__['garage.get_uri_path']("/v2/GetBucketInfo", {'globalAlias': bucket_name})
+    if bucket_result.status_code == 200:
+      bucket_info = bucket_result.json()
+
+      for key_block in bucket_info.get('keys', []):
+          key_name = key_block['name']
+          if not(key_name in keys_assigned):
+              config[f"garage_bucket_drop_key_{bucket_name}_{key_name}"] = {
+                  "garage.bucket_key_assignment_absent": [
+                      {'key_name':    key_name},
+                      {'bucket_id':   bucket_info['id']},
+                      {'accessKeyId': key_block['accessKeyId']},
+                      {'permissions': key_block['permissions']},
+                      {'require':     [bucket_section]},
+                  ]
+              }
 
     for key_name, key_permissions in keys_to_assign.items():
         config[f"garage_bucket_assign_key_{bucket_name}_{key_name}"] = {
             "garage.bucket_key_assignment_present": [
-                {'bucket_info': bucket_info},
+                {'bucket_name': bucket_name},
                 {'key_name':    key_name},
                 {'permissions': key_permissions},
                 {'require':     [bucket_section]},
@@ -79,12 +79,11 @@ def _update_settings_on_bucket(config, bucket_section, bucket_name, bucket_data)
     if 'config' in bucket_data:
         config[f"garage_bucket_update_config"] = {
             "garage.bucket_set_config": [
-                {'bucket_info':   bucket_info},
-                {'bucket_config': bucket_data['config']}
+                {'bucket_name':   bucket_name},
+                {'bucket_config': bucket_data['config']},
+                {'require':       [bucket_section]}
             ]
         }
-  else:
-    raise SaltConfigurationError(f"Can not bucket information for {bucket_name} {bucket_result.status_code}: {bucket_result.json()}")
 
 def run():
   config = {}
@@ -161,6 +160,7 @@ def run():
                         {'user':         'garage'},
                         {'group':        'garage'},
                         {'mode':         '0600'},
+                        {'require': ["garage_metadata_dir"]},
                         {'require_in':   ['garage_service']},
                         {'onchanges_in': ['garage_service']},
                         {'watch_in':     ['garage_service']},
@@ -186,6 +186,11 @@ def run():
 
             if _this_is_first_peer():
 
+                try:
+                    r = __salt__['garage.get_uri_path']('/v2/GetClusterLayout')
+                except requests.exceptions.ConnectionError:
+                    return config
+
                 if __salt__['pillar.get']('garage:layout:apply', False):
                     base_deps.append("garage_setup_layout")
                     config["garage_setup_layout"] = {
@@ -196,6 +201,20 @@ def run():
                             {'require': ["garage_service"]},
                         ]
                     }
+
+                try:
+                    r = __salt__['garage.get_uri_path']('/v2/GetClusterLayout')
+                    log.error(f"r {r.status_code}: {r.json()}")
+                    if r.status_code == 200:
+                        if r.json()['version'] == 0:
+                            log.error("Bowing because layout not ready")
+                            return config
+                    else:
+                        log.error("bowing out with status_code")
+                        return config
+                except requests.exceptions.ConnectionError:
+                    log.error("bowing it in exception")
+                    return config
 
                 garage_keys_pillar_path = 'garage:keys'
                 current_garage_keys = [x['id'] for x in __salt__['garage.list_keys']()]

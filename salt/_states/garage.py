@@ -125,12 +125,19 @@ def _key_needs_assigning(new_key_data, existing_keys):
         return False
   return True
 
+def _bucket_info_result_from(bucket_name):
+  bucket_result = __salt__['garage.get_uri_path']("/v2/GetBucketInfo", {'globalAlias': bucket_name})
+  if bucket_result.status_code in [200, 404]:
+    return bucket_result
+  else:
+    raise SaltConfigurationError(f"Can not bucket information for {bucket_name} {bucket_result.status_code}: {bucket_result.json()}")
+
 def bucket_exists(name, current_garage_buckets=[]):
   ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
   changes = []
   bucket_info = {}
 
-  bucket_info_result = __salt__['garage.get_uri_path']('/v2/GetBucketInfo', params={'globalAlias': name})
+  bucket_info_result = _bucket_info_result_from(name)
   if bucket_info_result.status_code == 500:
     ret["result"] = False
     ret["comment"] = f"Error while fetching bucket info for {name}: {bucket_info_result.status_code} {bucket_info_result.json()}"
@@ -175,8 +182,10 @@ def bucket_absent(name, bucket_id):
       ret["comment"] = f"Error deleting the key: {delete_result.status_code} {delete_result.json()}"
   return ret
 
-def bucket_set_config(name, bucket_info, bucket_config):
+def bucket_set_config(name, bucket_name, bucket_config):
   ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+  bucket_info_result = _bucket_info_result_from(bucket_name)
+  bucket_info = bucket_info_result.json()
   bucket_id = bucket_info['id']
   if __opts__["test"]:
     ret["comment"] = f"Updating config on {bucket_id}"
@@ -199,8 +208,11 @@ def bucket_set_config(name, bucket_info, bucket_config):
   return ret
 
 
-def bucket_key_assignment_present(name, bucket_info, key_name, permissions):
+def bucket_key_assignment_present(name, bucket_name, key_name, permissions):
   ret = {'name': name, 'result': None, 'changes': {}, 'comment': ""}
+  bucket_info_result = _bucket_info_result_from(bucket_name)
+  bucket_info = bucket_info_result.json()
+
   key_result    = __salt__['garage.get_uri_path']("/v2/GetKeyInfo",    {'search': key_name})
   if key_result.status_code == 200:
     krj = key_result.json()
