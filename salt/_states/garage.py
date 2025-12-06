@@ -15,7 +15,7 @@ def _update_layout_data(current_node_data, new_node_data):
       'id': node_data['id'],
     }
     for field in ['capacity', 'zone', 'tags']:
-      new_node[field] = new_node_data.get(field, node_data[field])
+      new_node[field] = new_node_data.get(field, node_data.get(field))
     new_node_list.append(new_node)
   return new_node_list
 
@@ -27,10 +27,14 @@ def layout_assignment(name, capacity, zone, tags=[]):
     current_cluster_layout = current_cluster_layout_result.json()
 
     all_correct = True
-    for node in current_cluster_layout['roles']:
-      if not(node['capacity'] == capacity and node['zone'] == zone and node['tags'] == tags):
-        all_correct = False
-        break
+    if len(current_cluster_layout['roles']) > 0:
+      for node in current_cluster_layout['roles']:
+        if not(node.get('capacity') == capacity and node.get('zone') == zone and node.get('tags') == tags):
+          all_correct = False
+          break
+    else:
+      all_correct = False
+
 
     if all_correct:
       ret["result"] = True
@@ -39,9 +43,15 @@ def layout_assignment(name, capacity, zone, tags=[]):
       if __opts__["test"]:
         ret["comment"] = f"Layout needs updating"
       else:
+        current_role_settings = current_cluster_layout['roles']
+        if len(current_role_settings) == 0:
+          gssr = __salt__['garage.get_uri_path']('/v2/GetClusterStatus')
+          gss  = gssr.json()
+          current_role_settings = [ {'id': node['id']} for node in gss['nodes']]
+
         new_data = {
           'roles': _update_layout_data(
-            current_cluster_layout['roles'],
+            current_role_settings,
             {'capacity': capacity, 'zone': zone, 'tags': tags}
           )
         }
