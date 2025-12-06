@@ -33,11 +33,15 @@ def _this_is_first_peer():
     if len(bootstrap_peers) == 0:
         return False
 
-    boostrap_peer_re = re.compile(r'^(?P<key_spec>\S+)@(?P<host>[^:]+):(?P<port>\d+)$')
-    mo = boostrap_peer_re.match(bootstrap_peers[0])
-    if mo:
-        return mo.group('host') == __salt__['grains.get']('fqdn')
-    return False
+    primary_node = __salt__['pillar.get']('garage:primary_node', None)
+
+    if primary_node is None:
+        boostrap_peer_re = re.compile(r'^(?P<key_spec>\S+)@(?P<host>[^:]+):(?P<port>\d+)$')
+        mo = boostrap_peer_re.match(bootstrap_peers[0])
+        if mo:
+            primary_node = mo.group('host')
+
+    return primary_node == __salt__['grains.get']('fqdn')
 
 def _update_settings_on_bucket(config, bucket_section, bucket_name, bucket_data):
 
