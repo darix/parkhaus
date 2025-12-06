@@ -23,8 +23,6 @@
 garage:
   node_key_base64:     {{ "garage/" ~ grains.id ~ "/node_key_base64"     | gopass }}
   node_key_pub_base64: {{ "garage/" ~ grains.id ~ "/node_key_pub_base64" | gopass }}
-  bootstrap_peers:
-    - {{ "garage/" ~ grains.id ~ "/node_identifier_secret" | gopass }}@{{ grains.fqdn }}:{{ admin_port }}
 
 ## in the roles pillar file:
 
@@ -49,6 +47,11 @@ garage:
     rpc_bind_addr:   "[::1]:{{ rpc_port }}"
     rpc_public_addr: "[::1]:{{ rpc_port }}"
     rpc_secret: {{ "garage/rpc_secret" | gopass }}
+
+    bootstrap_peers:
+      {%- for node in ["node1", "node2", "node3" ] %}
+      - {{ "garage/" ~ node ~ "/node_identifier_secret" | gopass }}@{{ node }}:{{ admin_port }}
+      {%- endfor %}
 
     s3_api:
       s3_region: {{ location }}
