@@ -18,6 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import os
 import re
 import logging
 import functools
@@ -107,16 +108,6 @@ def run():
             if not("data_dir" in garage_config):
                 garage_config["data_dir"] = f"{storage_dir}/data"
 
-            # if not("bootstrap_peers" in garage_config):
-            #     bootstrap_role          = __salt__["pillar.get"]("garage:bootstrap_role", None)
-            #     bootstrap_mine_function = __salt__["pillar.get"]("garage:bootstrap_mine_function", None)
-
-            #     if (bootstrap_role is None) or (bootstrap_mine_function is None):
-            #         bootstrap_peers = []
-            #         raise SaltConfigurationError("garage:config:bootstrap_peers is not set and garage:bootstrap_role + garage:bootstrap_mine_function are also not set")
-            #         bootstrap_peers = __salt__['mine.get'](f"I@role:{bootstrap_role}", bootstrap_mine_function, tgt_type='compound')
-
-
             config["garage_config"] = {
                 "file.managed": [
                     { "name": garage_config_path },
@@ -161,34 +152,27 @@ def run():
                 ]
             }
 
-            # TODO:
-            # {{ cfg.config.metadata_dir }}/node_key:
-            # file.decode:
-            #     - encoding_type: base64
-            #     - contents_pillar: garage:node_key_base64
-            #     - require:
-            #     - file: {{ cfg.config.metadata_dir }}
+            node_key_base64     = __salt__['pillar.get']('garage:node_key_base64', None)
+            node_key_pub_base64 = __salt__['pillar.get']('garage:node_key_pub_base64', None)
 
-            # {{ cfg.config.metadata_dir }}/node_key.pub:
-            # file.decode:
-            #     - encoding_type: base64
-            #     - contents_pillar: garage:node_key_pub_base64
-            #     - require:
-            #     - file: {{ cfg.config.metadata_dir }}
+            if (node_key_pub_base64 is not None) and (node_key_base64 is not None):
+                config["garage_node_keys"] = {
+                    'file.managed': [
+                        {'user':         'garage'},
+                        {'group':        'garage'},
+                        {'mode':         '0600'},
+                        {'require_in':   ['garage_service']},
+                        {'onchanges_in': ['garage_service']},
+                        {'watch_in':     ['garage_service']},
+                        { 'names': [
+                                { os.path.join(garage_config["metadata_dir"], 'node_key'):     [{ 'contents': __salt__['hashutil.base64_b64decode'](node_key_base64) }]},
+                                { os.path.join(garage_config["metadata_dir"], 'node_key.pub'): [{ 'contents': __salt__['hashutil.base64_b64decode'](node_key_pub_base64) }]},
+                            ]
+                        }
+                    ]
+                }
 
-            # permissions_{{ cfg.config.metadata_dir }}/node_key:
-            # file.managed:
-            #     - name: {{ cfg.config.metadata_dir }}/node_key
-            #     - user: garage
-            #     - group: garage
-            #     - mode: '0600'
 
-            # permissions_{{ cfg.config.metadata_dir }}/node_key.pub:
-            # file.managed:
-            #     - name: {{ cfg.config.metadata_dir }}/node_key.pub
-            #     - user: garage
-            #     - group: garage
-            #     - mode: '0600'
             config["garage_service"] = {
                 "service.running": [
                     { "name": "garage.service" },
