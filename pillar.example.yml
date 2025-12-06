@@ -17,28 +17,79 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+## per minion config
+
+{%- set rpc_port = 3901 %}
+garage:
+  node_key_base64:     {{ "garage/" ~ grains.id ~ "/node_key_base64"     | gopass }}
+  node_key_pub_base64: {{ "garage/" ~ grains.id ~ "/node_key_pub_base64" | gopass }}
+  bootstrap_peers:
+    - {{ "garage/" ~ grains.id ~ "/node_identifier_secret" | gopass }}@{{ grains.fqdn }}:{{ admin_port }}
+
+## in the roles pillar file:
+
 garage:
   storage_dir: /var/lib/garage
+
+  ## both of those values default to False
+  # purge_unmanaged_buckets: True
+  # purge_unmanaged_keys: True
+
+  ## by default we run all the config steps on the first node in the bootstrap_peers list
+  # primary_node: somenodeid
+
   config:
     # by default the 2 directories will be created relative to storage_dir
     # metadata_dir: {storage_dir}/meta
     # data_dir:     {storge_dir}/data
     db_engine: sqlite
+
     replication_factor: 1
-    rpc_bind_addr: "[::1]:3901"
-    rpc_public_addr: "[::1]:3901"
+
+    rpc_bind_addr:   "[::1]:{{ rpc_port }}"
+    rpc_public_addr: "[::1]:{{ rpc_port }}"
     rpc_secret: {{ "garage/rpc_secret" | gopass }}
+
     s3_api:
-      s3_region: "garage"
+      s3_region: {{ location }}
       api_bind_addr: "[::1]:3900"
       root_domain: ".s3.garage.localhost"
+
     s3_web:
       bind_addr: "[::1]:3902"
       root_domain: ".web.garage.localhost"
       index: "index.html"
+
     k2v_api:
       api_bind_addr: "[::1]:3904"
+
     admin:
       api_bind_addr: "[::1]:3903"
       admin_token:   {{ "garage/admin_token" | gopass }}
       metrics_token: {{ "garage/metrics_token" | gopass }}
+
+  layout:
+    zone: {{ location }}
+    capacity: 1024000000
+    tags:
+      - {{ main_tag }}
+    apply: True
+    lock_file: ".salt_cluster_layout.lock"
+
+  keys:
+    patroni:
+      key_id:     {{ "garage/keys/patroni/key_id"     | gopass }}
+      secret_key: {{ "garage/keys/patroni/secret_key" | gopass }}
+
+  buckets:
+    name: patroni
+      config:
+        quotas:
+          "maxObjects": 0
+          "maxSize": 0
+      keys:
+        # references the patroni key above
+        patroni:
+          owner: true
+          read: true
+          write: true
