@@ -11,11 +11,8 @@ file_roots:
   base:
     - {{ salt_base_dir }}/salt
     - {{ formulas_base_dir }}/parkhaus/salt
+```
 
-pillar_roots:
-  base:
-    - {{ salt_base_dir }}/pillar/
-    - {{ formulas_base_dir }}/parkhaus/pillar/
 ## License
 ```
 ## cfgmgmt-template integration
