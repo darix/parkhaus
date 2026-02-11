@@ -53,7 +53,7 @@ garage:
     bootstrap_peers:
       {%- for node in [1,2,3,4 ] %}
       {%- set node_id = "garage/ibs-minio-" ~ node ~ "/node_identifier_secret" %}
-      - {{ node_id | gopass(quoted=False) }}@ibs-minio-{{ node }}.ibsmgmt.suse.de:{{ admin_port }}
+      - {{ node_id | gopass(quoted=False) }}@ibs-minio-{{ node }}.ibsmgmt.suse.de:{{ rpc_port }}
       {%- endfor %}
 
     s3_api:
