@@ -178,6 +178,7 @@ def run():
                     { "name": "garage.service" },
                     { "enable": True },
                     { "watch": ["garage_config"] },
+                    { "onchanges":  ["garage_config"] },
                     { "require": ["garage_data_dir", "garage_metadata_dir", "garage_config"] },
                 ]
             }

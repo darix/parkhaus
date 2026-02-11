@@ -21,8 +21,10 @@
 
 {%- set rpc_port = 3901 %}
 garage:
-  node_key_base64:     {{ "garage/" ~ grains.id ~ "/node_key_base64"     | gopass }}
-  node_key_pub_base64: {{ "garage/" ~ grains.id ~ "/node_key_pub_base64" | gopass }}
+  {%- set node_key = "garage/" ~ grains.id ~ "/node_key_base64" %}
+  {%- set node_key_pub = "garage/" ~ grains.id ~ "/node_key_pub_base64" %}
+  node_key_base64:     {{ node_key     | gopass }}
+  node_key_pub_base64: {{ node_key_pub | gopass }}
 
 ## in the roles pillar file:
 
@@ -49,8 +51,9 @@ garage:
     rpc_secret: {{ "garage/rpc_secret" | gopass }}
 
     bootstrap_peers:
-      {%- for node in ["node1", "node2", "node3" ] %}
-      - {{ "garage/" ~ node ~ "/node_identifier_secret" | gopass }}@{{ node }}:{{ admin_port }}
+      {%- for node in [1,2,3,4 ] %}
+      {%- set node_id = "garage/ibs-minio-" ~ node ~ "/node_identifier_secret" %}
+      - {{ node_id | gopass(quoted=False) }}@ibs-minio-{{ node }}.ibsmgmt.suse.de:{{ admin_port }}
       {%- endfor %}
 
     s3_api:
@@ -85,7 +88,7 @@ garage:
       secret_key: {{ "garage/keys/patroni/secret_key" | gopass }}
 
   buckets:
-    name: patroni
+    - name: patroni
       config:
         quotas:
           "maxObjects": 0

@@ -27,7 +27,7 @@ def _get_full_url(uri_path):
   return f"{_get_admin_url()}{uri_path}"
 
 def _auth_header(extra_headers={}):
-  rpc_secret  = __salt__['pillar.get']('garage:config:rpc_secret', None)
+  rpc_secret  = __salt__['pillar.get']('garage:config:admin:admin_token', None)
   if rpc_secret is None:
     raise SaltConfigurationError(f"Could not rpc_secret in the pillar")
 
