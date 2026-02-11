@@ -40,7 +40,7 @@ garage:
     # by default the 2 directories will be created relative to storage_dir
     # metadata_dir: {storage_dir}/meta
     # data_dir:     {storge_dir}/data
-    db_engine: sqlite
+    db_engine: lmdb
 
     replication_factor: 1
 
