@@ -20,6 +20,15 @@
 ## per minion config
 
 {%- set rpc_port = 3901 %}
+{%- set admin_port = 3903 %}
+{%- set location = "eu-west-1" %}
+{%- set main_tag = "ins" %}
+{%- set rpc_bind_addr = '0.0.0.0' %}
+{%- set admin_bind_addr = '127.0.0.1' %}
+{%- set services_bind_addr = '127.0.0.1' %}
+{%- set capacity = 1 * 1024 * 1024 * 1024 %}
+{%- set bucket_list = ['patroni', 'restic' ] %}
+
 garage:
   {%- set node_key = "garage/" ~ grains.id ~ "/node_key_base64" %}
   {%- set node_key_pub = "garage/" ~ grains.id ~ "/node_key_pub_base64" %}
@@ -46,56 +55,59 @@ garage:
 
     replication_factor: 1
 
-    rpc_bind_addr:   "[::1]:{{ rpc_port }}"
-    rpc_public_addr: "[::1]:{{ rpc_port }}"
+    rpc_bind_addr:   "{{ rpc_bind_addr }}:{{ rpc_port }}"
+    rpc_public_addr: "{{ rpc_bind_addr }}:{{ rpc_port }}"
     rpc_secret: {{ "garage/rpc_secret" | gopass }}
 
     bootstrap_peers:
       {%- for node in [1,2,3,4 ] %}
-      {%- set node_id = "garage/ibs-minio-" ~ node ~ "/node_identifier_secret" %}
-      - {{ node_id | gopass(quoted=False) }}@ibs-minio-{{ node }}.ibsmgmt.suse.de:{{ rpc_port }}
+      {%- set host = "garage-" ~ node %}
+      {%- set node_id = "garage/" ~ host ~ "/node_identifier_secret" %}
+      - {{ node_id | gopass(quoted=False) }}@{{ host }}.{{ grains.domain }}:{{ rpc_port }}
       {%- endfor %}
 
     s3_api:
       s3_region: {{ location }}
-      api_bind_addr: "[::1]:3900"
+      api_bind_addr: "{{ services_bind_addr }}:3900"
       root_domain: ".s3.garage.localhost"
 
     s3_web:
-      bind_addr: "[::1]:3902"
+      bind_addr: "{{ services_bind_addr }}:3902"
       root_domain: ".web.garage.localhost"
       index: "index.html"
 
     k2v_api:
-      api_bind_addr: "[::1]:3904"
+      api_bind_addr: "{{ services_bind_addr }}:3904"
 
     admin:
-      api_bind_addr: "[::1]:3903"
+      api_bind_addr: "{{ admin_bind_addr }}:{{ admin_port }}"
       admin_token:   {{ "garage/admin_token" | gopass }}
       metrics_token: {{ "garage/metrics_token" | gopass }}
 
   layout:
     zone: {{ location }}
-    capacity: 1024000000
+    capacity: {{ capacity }}
     tags:
       - {{ main_tag }}
     apply: True
     lock_file: ".salt_cluster_layout.lock"
 
   keys:
-    patroni:
-      key_id:     {{ "garage/keys/patroni/key_id"     | gopass }}
-      secret_key: {{ "garage/keys/patroni/secret_key" | gopass }}
+    {%- for bucket in bucket_list %}
+    {{ bucket }}:
+      {%- set key_id     = "garage/keys/" ~ bucket ~ "/key_id"     %}
+      {%- set secret_key = "garage/keys/" ~ bucket ~ "/secret_key" %}
+      key_id:     {{ key_id     | gopass }}
+      secret_key: {{ secret_key | gopass }}
+    {%- endfor %}
 
   buckets:
-    - name: patroni
-      config:
-        quotas:
-          "maxObjects": 0
-          "maxSize": 0
+    {%- for bucket in bucket_list %}
+    - name: {{ bucket }}
       keys:
-        # references the patroni key above
-        patroni:
+        # references the key above
+        {{ bucket }}:
           owner: true
           read: true
           write: true
+    {%- endfor %}
